@@ -29,6 +29,10 @@ jobs:
       - name: 📥 Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: 🩹 Fix Swift tools version for Xcode compatibility
+        run: |
+          sed -i '' 's/swift-tools-version: 6.2/swift-tools-version: 6.0/g' node_modules/expo-modules-jsi/apple/Package.swift || true
+
       - name: 🌐 Build mobile web assets
         run: pnpm --dir apps/mobile/web-app build --outDir "${{ github.workspace }}/out/rn-web/html-renderer"
 
@@ -50,11 +54,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            build | tee xcodebuild.log || {
-              echo "=== BUILD FAILED: LAST 100 LINES OF LOG ==="
-              tail -n 100 xcodebuild.log
-              exit 1
-            }
+            build
 
       - name: 📦 Package .ipa for Sideloadly
         working-directory: apps/mobile/ios
