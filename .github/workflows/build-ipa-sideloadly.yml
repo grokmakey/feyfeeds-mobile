@@ -33,7 +33,6 @@ jobs:
         run: |
           sed -i '' 's/swift-tools-version: 6.2/swift-tools-version: 6.0/g' node_modules/expo-modules-jsi/apple/Package.swift || true
           find node_modules/expo-modules-jsi/apple/Sources -name "*.swift" -exec sed -i '' 's/weak let/nonisolated(unsafe) weak var/g' {} +
-          find node_modules/expo-modules-jsi/apple/Sources -name "*.swift" -exec sed -i '' 's/weak var/nonisolated(unsafe) weak var/g' {} +
           sed -i '' 's/_ arguments: consuming JavaScriptValuesBuffer,/_ arguments: consuming JavaScriptValuesBuffer/g' node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift || true
 
       - name: 🌐 Build mobile web assets
@@ -63,7 +62,7 @@ jobs:
         working-directory: apps/mobile/ios
         run: |
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/Folo.app Payload/
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
           zip -r FeyFeeds.ipa Payload
 
       - name: 📤 Upload FeyFeeds IPA Artifact
