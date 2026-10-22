@@ -30,10 +30,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: 🩹 Patch Swift syntax in expo-modules-jsi for Xcode 16 compatibility
-        run: |
-          sed -i '' 's/swift-tools-version: 6.2/swift-tools-version: 6.0/g' node_modules/expo-modules-jsi/apple/Package.swift || true
-          find node_modules/expo-modules-jsi/apple/Sources -name "*.swift" -exec sed -i '' 's/weak let/nonisolated(unsafe) weak var/g' {} +
-          sed -i '' 's/_ arguments: consuming JavaScriptValuesBuffer,/_ arguments: consuming JavaScriptValuesBuffer/g' node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift || true
+        run: node scripts/patch-expo-modules-jsi.mjs
 
       - name: 🌐 Build mobile web assets
         run: pnpm --dir apps/mobile/web-app build --outDir "${{ github.workspace }}/out/rn-web/html-renderer"
