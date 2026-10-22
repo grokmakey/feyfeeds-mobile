@@ -37,7 +37,7 @@ jobs:
         run: |
           pod install --repo-update
 
-      - name: 🔨 Build iOS Archive (Unsigned)
+      - name: 🔨 Build iOS App (Unsigned)
         working-directory: apps/mobile/ios
         run: |
           xcodebuild \
@@ -45,18 +45,22 @@ jobs:
             -scheme Folo \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath build/Folo.xcarchive \
-            archive \
+            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            COMPILER_INDEX_STORE_ENABLE=NO
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build | tee xcodebuild.log || {
+              echo "=== BUILD FAILED: LAST 100 LINES OF LOG ==="
+              tail -n 100 xcodebuild.log
+              exit 1
+            }
 
       - name: 📦 Package .ipa for Sideloadly
         working-directory: apps/mobile/ios
         run: |
           mkdir -p Payload
-          cp -r build/Folo.xcarchive/Products/Applications/Folo.app Payload/
+          cp -r build/Build/Products/Release-iphoneos/Folo.app Payload/
           zip -r FeyFeeds.ipa Payload
 
       - name: 📤 Upload FeyFeeds IPA Artifact
