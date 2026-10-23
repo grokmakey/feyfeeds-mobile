@@ -5,7 +5,7 @@ set -euo pipefail
 # Run from apps/mobile after dependencies and CocoaPods are installed.
 DERIVED_DATA="${RUNNER_TEMP:-/tmp}/feyfeeds-ios-derived"
 IPA_DIR="${RUNNER_TEMP:-/tmp}/feyfeeds-ipa"
-APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Folo.app"
+APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/FeyFeeds.app"
 
 xcodebuild \
   -workspace ios/Folo.xcworkspace \
@@ -20,7 +20,7 @@ xcodebuild \
 test -d "$APP_PATH"
 rm -rf "$IPA_DIR"
 mkdir -p "$IPA_DIR/Payload"
-ditto "$APP_PATH" "$IPA_DIR/Payload/Folo.app"
+ditto "$APP_PATH" "$IPA_DIR/Payload/FeyFeeds.app"
 rm -f build.ipa
 (cd "$IPA_DIR" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/apps/mobile/build.ipa" Payload)
 test -s build.ipa
