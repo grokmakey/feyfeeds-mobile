@@ -52,7 +52,7 @@ if (!basePath) {
   process.exit(0);
 }
 
-console.log(`Patching expo-modules-jsi at ${basePath} for Xcode 16 / Swift 6.1 compatibility...`);
+console.log(`Patching expo-modules-jsi at ${basePath} for Xcode 26.4 / Swift 6.3 compatibility...`);
 
 // 1. Package.swift
 const packageSwiftPath = path.join(basePath, 'apple/Package.swift');
@@ -63,27 +63,9 @@ if (fs.existsSync(packageSwiftPath)) {
   console.log('✓ Patched Package.swift tools-version to 6.0');
 }
 
-// 2. Replace weak let with nonisolated(unsafe) weak var across all Swift files
-function patchSwiftFiles(dir) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      patchSwiftFiles(fullPath);
-    } else if (entry.name.endsWith('.swift')) {
-      let content = fs.readFileSync(fullPath, 'utf8');
-      if (content.includes('weak let')) {
-        content = content.replace(/weak let/g, 'nonisolated(unsafe) weak var');
-        fs.writeFileSync(fullPath, content, 'utf8');
-        console.log(`✓ Patched weak let in ${entry.name}`);
-      }
-    }
-  }
-}
-const sourcesPath = path.join(basePath, 'apple/Sources');
-if (fs.existsSync(sourcesPath)) {
-  patchSwiftFiles(sourcesPath);
-}
+// 2. Do not rewrite weak let declarations. Swift 6.3 (Xcode 26.4+) supports
+// them directly; rewriting them to mutable weak vars causes Sendable errors
+// for classes whose stored properties are required to remain immutable.
 
 // 3. Task+immediate.swift
 const taskImmediatePath = path.join(basePath, 'apple/Sources/ExpoModulesJSI/Extensions/Task+immediate.swift');
