@@ -97,6 +97,9 @@ jobs:
         run: pod install
       - name: 🔨 Build unsigned IPA
         working-directory: apps/mobile
+        env:
+          PROFILE: preview
+          SENTRY_AUTH_TOKEN: ${{ secrets.RN_SENTRY_AUTH_TOKEN }}
         run: bash ../../.github/scripts/build-ios-unsigned-ipa.sh
       - name: 📤 Upload IPA for Sideloadly
         uses: actions/upload-artifact@v7
