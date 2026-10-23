@@ -46,9 +46,53 @@ function findExpoModulesJSI() {
   return null;
 }
 
+function patchPodfile() {
+  const candidates = [
+    path.join(process.cwd(), 'ios', 'Podfile'),
+    path.join(process.cwd(), 'apps', 'mobile', 'ios', 'Podfile'),
+    path.join(process.cwd(), '..', 'ios', 'Podfile'),
+    path.join(process.cwd(), '..', 'apps', 'mobile', 'ios', 'Podfile'),
+  ];
+
+  const targetPodfile = candidates.find((p) => fs.existsSync(p));
+  if (!targetPodfile) {
+    console.log('Podfile not found, skipping Podfile patch.');
+    return;
+  }
+
+  let content = fs.readFileSync(targetPodfile, 'utf8');
+  const block = `
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    next unless target.name == 'ExpoModulesJSI'
+
+    target.build_configurations.each do |config|
+      config.build_settings['SWIFT_VERSION'] = '5.9'
+      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
+    end
+  end
+end
+`;
+
+  if (content.includes("target.name == 'ExpoModulesJSI'")) {
+    console.log('Podfile already contains ExpoModulesJSI Swift override.');
+    return;
+  }
+
+  if (content.includes('post_install do |installer|')) {
+    content = content.replace(/post_install do \|installer\|\n(?:.*\n)*?end\n?/m, block);
+  } else {
+    content += `\n${block}\n`;
+  }
+
+  fs.writeFileSync(targetPodfile, content, 'utf8');
+  console.log(`✓ Patched Podfile at ${targetPodfile}`);
+}
+
 const basePath = findExpoModulesJSI();
 if (!basePath) {
   console.log('expo-modules-jsi not found, skipping patch.');
+  patchPodfile();
   process.exit(0);
 }
 
@@ -59,7 +103,7 @@ const packageSwiftPath = path.join(basePath, 'apple/Package.swift');
 if (fs.existsSync(packageSwiftPath)) {
   let content = fs.readFileSync(packageSwiftPath, 'utf8');
   content = content.replace(/swift-tools-version:\s*6\.2/g, 'swift-tools-version: 6.0');
-  fs.writeFileSync(packageSwiftPath, content, 'utf8');
+  fs.writeFileSync(packageSwiftPath, 'utf8');
   console.log('✓ Patched Package.swift tools-version to 6.0');
 }
 
@@ -146,4 +190,5 @@ if (fs.existsSync(jsRuntimePath)) {
   console.log('✓ Patched JavaScriptRuntime.swift (vector push_back, HostFunctionClosure.create, trailing comma)');
 }
 
+patchPodfile();
 console.log('expo-modules-jsi patching completed successfully.');
