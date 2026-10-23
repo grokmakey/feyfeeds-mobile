@@ -60,6 +60,11 @@ jobs:
       - name: 📦 Checkout code
         uses: actions/checkout@v7
 
+      # Expo SDK 57 requires Xcode 26.4+ (Swift 6.3).
+      # Keep the self-hosted runner on the same toolchain as the GitHub-hosted runner.
+      - name: 🔧 Setup Xcode
+        uses: ./.github/actions/setup-xcode
+
       - name: 📱 Setup EAS
         uses: expo/expo-github-action@v9
         with:
