@@ -109,18 +109,46 @@ extension Task where Failure == any Error {
 const hostFuncPath = path.join(basePath, 'apple/Sources/ExpoModulesJSI-Cxx/include/HostFunctionClosure.h');
 if (fs.existsSync(hostFuncPath)) {
   let content = fs.readFileSync(hostFuncPath, 'utf8');
-  if (!content.includes('static inline HostFunctionClosure *create')) {
+  content = content.replace(
+    'static inline HostFunctionClosure *create(',
+    'static inline HostFunctionClosure *_Nonnull create('
+  );
+  if (!content.includes('static inline HostFunctionClosure *_Nonnull create')) {
     content = content.replace(
       'explicit HostFunctionClosure(Context context, Closure closure, Deallocator deallocator) : RetainedSwiftPointer(context, deallocator), _closure(closure) {};',
       `explicit HostFunctionClosure(Context context, Closure closure, Deallocator deallocator) : RetainedSwiftPointer(context, deallocator), _closure(closure) {};
 
-  static inline HostFunctionClosure *create(Context context, Closure closure, Deallocator deallocator) {
+  static inline HostFunctionClosure *_Nonnull create(Context context, Closure closure, Deallocator deallocator) {
     return new HostFunctionClosure(context, closure, deallocator);
   }`
     );
-    fs.writeFileSync(hostFuncPath, content, 'utf8');
-    console.log('✓ Added static create() to HostFunctionClosure.h');
   }
+  fs.writeFileSync(hostFuncPath, content, 'utf8');
+  console.log('✓ Added static create() to HostFunctionClosure.h');
+}
+
+// 4b. HostObjectCallbacks.h - C++ move helper for non-copyable PropNameID vector
+const hostObjCallbacksPath = path.join(basePath, 'apple/Sources/ExpoModulesJSI-Cxx/include/HostObjectCallbacks.h');
+if (fs.existsSync(hostObjCallbacksPath)) {
+  let content = fs.readFileSync(hostObjCallbacksPath, 'utf8');
+  if (!content.includes('#include "IRuntimeCompat.h"')) {
+    content = content.replace(
+      '#include "RetainedSwiftPointer.h"',
+      '#include "RetainedSwiftPointer.h"\n#include "IRuntimeCompat.h"'
+    );
+  }
+  if (!content.includes('pushPropNameId')) {
+    content = content.replace(
+      '} SWIFT_NONCOPYABLE; // class HostObjectCallbacks',
+      `} SWIFT_NONCOPYABLE; // class HostObjectCallbacks
+
+inline void pushPropNameId(HostObjectCallbacks::PropNameIds *_Nonnull vector, facebook::jsi::IRuntime &runtime, const std::string &name) {
+  vector->push_back(facebook::jsi::PropNameID::forUtf8(runtime, name));
+}`
+    );
+  }
+  fs.writeFileSync(hostObjCallbacksPath, content, 'utf8');
+  console.log('✓ Added pushPropNameId() C++ move helper to HostObjectCallbacks.h');
 }
 
 // 5. JavaScriptRuntime.swift
@@ -132,15 +160,15 @@ if (fs.existsSync(jsRuntimePath)) {
     '_ arguments: consuming JavaScriptValuesBuffer'
   );
   content = content.replace(
-    'vector.push_back(consuming: propNameId)',
-    'vector.push_back(propNameId)'
+    /let propNameId = facebook\.jsi\.PropNameID\.forUtf8\(iRuntime, std\.string\(propertyName\)\)\s*\n\s*vector\.push_back\((?:consuming:\s*)?propNameId\)/g,
+    'expo.pushPropNameId(&vector, iRuntime, std.string(propertyName))'
   );
   content = content.replace(
     /return expo\.HostFunctionClosure\(context, call, deallocate\)/g,
     'return expo.HostFunctionClosure.create(context, call, deallocate)'
   );
   fs.writeFileSync(jsRuntimePath, content, 'utf8');
-  console.log('✓ Patched JavaScriptRuntime.swift (vector push_back, HostFunctionClosure.create, trailing comma)');
+  console.log('✓ Patched JavaScriptRuntime.swift (pushPropNameId, HostFunctionClosure.create, trailing comma)');
 }
 
 console.log('expo-modules-jsi patching completed successfully.');
