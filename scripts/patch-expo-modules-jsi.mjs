@@ -1,13 +1,58 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const basePath = path.resolve('node_modules/expo-modules-jsi');
-if (!fs.existsSync(basePath)) {
+function findExpoModulesJSI() {
+  const cwd = process.cwd();
+  const roots = [
+    cwd,
+    path.join(cwd, 'apps', 'mobile'),
+    path.join(cwd, '..'),
+    path.join(cwd, '..', 'apps', 'mobile'),
+  ];
+
+  const seen = new Set();
+
+  function walk(dir, depth = 0) {
+    if (depth > 6) return null;
+    if (!fs.existsSync(dir)) return null;
+    if (seen.has(dir)) return null;
+    seen.add(dir);
+
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (entry.name === 'expo-modules-jsi') {
+          return fullPath;
+        }
+
+        const result = walk(fullPath, depth + 1);
+        if (result) return result;
+      }
+    }
+
+    return null;
+  }
+
+  for (const root of roots) {
+    const directPackage = path.join(root, 'node_modules', 'expo-modules-jsi');
+    if (fs.existsSync(directPackage)) return directPackage;
+
+    const result = walk(path.join(root, 'node_modules'), 0);
+    if (result) return result;
+  }
+
+  return null;
+}
+
+const basePath = findExpoModulesJSI();
+if (!basePath) {
   console.log('expo-modules-jsi not found, skipping patch.');
   process.exit(0);
 }
 
-console.log('Patching expo-modules-jsi for Xcode 16 / Swift 6.1 compatibility...');
+console.log(`Patching expo-modules-jsi at ${basePath} for Xcode 16 / Swift 6.1 compatibility...`);
 
 // 1. Package.swift
 const packageSwiftPath = path.join(basePath, 'apple/Package.swift');
@@ -18,7 +63,7 @@ if (fs.existsSync(packageSwiftPath)) {
   console.log('✓ Patched Package.swift tools-version to 6.0');
 }
 
-// 2. Replace weak let with nonisolated(unsafe) weak var across all swift files
+// 2. Replace weak let with nonisolated(unsafe) weak var across all Swift files
 function patchSwiftFiles(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -82,17 +127,14 @@ if (fs.existsSync(hostFuncPath)) {
 const jsRuntimePath = path.join(basePath, 'apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift');
 if (fs.existsSync(jsRuntimePath)) {
   let content = fs.readFileSync(jsRuntimePath, 'utf8');
-  // Remove trailing comma in function signature
   content = content.replace(
     '_ arguments: consuming JavaScriptValuesBuffer,',
     '_ arguments: consuming JavaScriptValuesBuffer'
   );
-  // Fix vector.push_back consuming: label
   content = content.replace(
     'vector.push_back(consuming: propNameId)',
     'vector.push_back(propNameId)'
   );
-  // Use HostFunctionClosure.create instead of direct constructor
   content = content.replace(
     /return expo\.HostFunctionClosure\(context, call, deallocate\)/g,
     'return expo.HostFunctionClosure.create(context, call, deallocate)'
