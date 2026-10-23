@@ -1,4 +1,4 @@
-name: 🍎 Build iOS
+name: 🍎 Build iOS IPA for Sideloadly
 
 on:
   push:
@@ -7,37 +7,21 @@ on:
     paths:
       - ".github/actions/setup-xcode/**"
       - ".github/workflows/build-ios.yml"
+      - ".github/scripts/build-ios-unsigned-ipa.sh"
       - "apps/mobile/**"
       - "pnpm-lock.yaml"
   workflow_dispatch:
-    inputs:
-      profile:
-        type: choice
-        default: preview
-        options:
-          - preview
-          - production
-        description: "Build profile"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.profile }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   check-runner:
-    if: >-
-      github.secret_source != 'None' &&
-      (
-        github.event_name != 'push' ||
-        !(
-          (github.ref == 'refs/heads/mobile-main' && contains(github.event.head_commit.message || '', 'release(mobile):')) ||
-          (github.ref == 'refs/heads/main' && contains(github.event.head_commit.message || '', 'release(desktop):'))
-        )
-      )
+    if: github.secret_source != 'None'
     runs-on: ubuntu-latest
     outputs:
       runner-label: ${{ steps.set-runner.outputs.runner-label }}
-
     steps:
       - name: Set runner
         id: set-runner
@@ -51,104 +35,75 @@ jobs:
           fi
 
   build-ipa-self-hosted:
-    name: Build iOS IPA (self-hosted)
+    name: Build unsigned IPA (self-hosted)
     if: needs.check-runner.outputs.runner-label == 'self-hosted'
     needs: check-runner
     runs-on: [self-hosted, macOS]
-
     steps:
       - name: 📦 Checkout code
         uses: actions/checkout@v7
-
-      - name: 📱 Setup EAS
-        uses: expo/expo-github-action@v9
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --child-concurrency=1
-
-      - name: Build mobile web assets
-        run: pnpm --dir apps/mobile/web-app build --outDir "${{ github.workspace }}/out/rn-web/html-renderer"
-
-      - name: 🔨 Build iOS IPA
-        working-directory: apps/mobile
-        run: eas build --platform ios --profile ${{ github.event.inputs.profile || 'preview' }} --non-interactive --local --output=./build.ipa
-        env:
-          EAS_BUILD_DISABLE_EXPO_DOCTOR_STEP: "1"
-          EAS_NO_FROZEN_LOCKFILE: "1"
-          SENTRY_AUTH_TOKEN: ${{ secrets.RN_SENTRY_AUTH_TOKEN }}
-          CI: true
-
-      # Optional: Upload artifact
-      - name: 📤 Upload IPA
-        uses: actions/upload-artifact@v7
-        with:
-          name: app-ios
-          path: apps/mobile/build.ipa
-          retention-days: 90
-
-      - name: Clear Xcode cache
-        run: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-
-      - name: Submit to App Store
-        if: github.event.inputs.profile == 'production'
-        working-directory: apps/mobile
-        run: eas submit --platform ios --path build.ipa --non-interactive
-
-  build-ipa-github:
-    name: Build iOS IPA (GitHub)
-    if: needs.check-runner.outputs.runner-label == 'macos-26'
-    needs: check-runner
-    runs-on: macos-26
-
-    steps:
-      - name: 📦 Checkout code
-        uses: actions/checkout@v7
-
       - name: 🔧 Setup Xcode
         uses: ./.github/actions/setup-xcode
-
       - name: 📦 Setup pnpm
         uses: pnpm/action-setup@v6
-
       - name: 🏗 Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: "pnpm"
-
-      - name: 📱 Setup EAS
-        uses: expo/expo-github-action@v9
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --child-concurrency=1
-
       - name: Build mobile web assets
         run: pnpm --dir apps/mobile/web-app build --outDir "${{ github.workspace }}/out/rn-web/html-renderer"
-
-      - name: 🔨 Build iOS IPA
+      - name: Install CocoaPods
+        working-directory: apps/mobile/ios
+        run: pod install
+      - name: 🔨 Build unsigned IPA
         working-directory: apps/mobile
-        run: eas build --platform ios --profile ${{ github.event.inputs.profile || 'preview' }} --non-interactive --local --output=./build.ipa
         env:
-          EAS_BUILD_DISABLE_EXPO_DOCTOR_STEP: "1"
-          EAS_NO_FROZEN_LOCKFILE: "1"
-          CI: true
+          PROFILE: preview
           SENTRY_AUTH_TOKEN: ${{ secrets.RN_SENTRY_AUTH_TOKEN }}
-      # Optional: Upload artifact
-      - name: 📤 Upload IPA
+        run: bash ../../.github/scripts/build-ios-unsigned-ipa.sh
+      - name: 📤 Upload IPA for Sideloadly
         uses: actions/upload-artifact@v7
         with:
-          name: app-ios
+          name: feyfeeds-ios-unsigned-ipa
           path: apps/mobile/build.ipa
-          retention-days: 90
+          retention-days: 30
 
-      - name: Submit to App Store
-        if: github.event.inputs.profile == 'production'
+  build-ipa-github:
+    name: Build unsigned IPA (GitHub-hosted)
+    if: needs.check-runner.outputs.runner-label == 'macos-26'
+    needs: check-runner
+    runs-on: macos-26
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v7
+      - name: 🔧 Setup Xcode
+        uses: ./.github/actions/setup-xcode
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v6
+      - name: 🏗 Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --child-concurrency=1
+      - name: Build mobile web assets
+        run: pnpm --dir apps/mobile/web-app build --outDir "${{ github.workspace }}/out/rn-web/html-renderer"
+      - name: Install CocoaPods
+        working-directory: apps/mobile/ios
+        run: pod install
+      - name: 🔨 Build unsigned IPA
         working-directory: apps/mobile
-        run: eas submit --platform ios --path build.ipa --non-interactive
+        env:
+          PROFILE: preview
+          SENTRY_AUTH_TOKEN: ${{ secrets.RN_SENTRY_AUTH_TOKEN }}
+        run: bash ../../.github/scripts/build-ios-unsigned-ipa.sh
+      - name: 📤 Upload IPA for Sideloadly
+        uses: actions/upload-artifact@v7
+        with:
+          name: feyfeeds-ios-unsigned-ipa
+          path: apps/mobile/build.ipa
+          retention-days: 30
